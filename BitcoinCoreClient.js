@@ -56,8 +56,23 @@ class BitcoinCoreClient{
     }
 
     async getRawTransaction(transactionID){
-        const info = await this.client.getRawTransaction(transactionID);
+        const info = await this.client.getRawTransaction({
+            txid: transactionID,
+            verbosity: 1
+        });
         return info;
+    }
+
+    async signTransaction(transactionHEX){
+        const result = await this.client.signRawTransactionWithWallet({
+            hexstring:transactionHEX
+        });
+        return result;
+    }
+
+    async broadcastTransaction(transactionHEX){
+        const txID = await this.client.command('sendrawtransaction', transactionHEX);
+        return txID;
     }
 }
 module.exports = BitcoinCoreClient 

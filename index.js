@@ -19,10 +19,17 @@ const pubKeyM=[
 	'a8428c79c4b07661c953eb4c7902a41ce8544217f2e136bbe887456aef1f9a39'
 ];
 
+const priceForUser=0.01
+const priceForMerchant=0.008
+
+let merchants=[];
+
 let user=new BitcoinCoreClient('userWallet');
 let issuer=new BitcoinCoreClient('issuerWallet');
 let dummy=new BitcoinCoreClient('testwallet1');
-
+let merch1 = new BitcoinCoreClient('merchantWallet1');
+let merch2 = new BitcoinCoreClient('merchantWallet1');
+let merch3 = new BitcoinCoreClient('merchantWallet1');
 
 async function getWalletUTXOs(client){
 	try {
@@ -83,12 +90,7 @@ function createTaprootTree(scripts){
 	
 	if(scripts.length==1){
 		return {output: scripts[0]};
-	}/*else if(scripts.lenght==2){
-		tree.push([{output: scripts[0]}, {output: scripts[1]}])
-		scripts.shift();
-		scripts.shift();
-		return tree;
-	}*/else{
+	}else{
 		let toInsert=scripts[0];
 		scripts.shift();
 		let newTree=[createTaprootTree(scripts), {output: toInsert}];
@@ -123,57 +125,111 @@ async function setUpIssuerTransaction(prevTransactionID){
 		    network,
 		});
 
+		info = await getRawTransaction(issuer, prevTransactionID);
+		let prevIndex, prevValue;
 
-		info = await issuer.getRawTransaction(issuer);
-		console.log(info);
-		return;
+		for(var i= 0; i<info.vout.length; i++){
+			if(info.vout[i].value==priceForUser){
+				prevIndex = info.vout[i].n;
+				prevValue = info.vout[i].value;
+			}
+		}	
 
-		const prevTxId = prevTransactionID;  // Replace with the actual transaction ID
-		const prevIndex = 0;  // Index of the output in the previous transaction
-		const prevValue = 100000; 
+		const prevTxId = prevTransactionID;
+		const destinationAddress = p2tr.address; 
+		const sendAmount = priceForMerchant * Math.pow(10, 8);
 
-		const destinationAddress = 'destination-address'; 
-		const sendAmount = 90000;
-
-		// Initialize the PSBT
-		const psbt = new bitcoin.Psbt({ network });
-
-		// Add the input
-		psbt.addInput({
-		    hash: prevTxId,
-		    index: prevIndex,
-		    witnessUtxo: {
-		        script: p2tr.output,
-		        value: prevValue,
-		    },
-		    tapLeafScript: [{
-		        leafVersion: scriptTree[0].version,
-		        script: scriptTree[0].output,
-		        controlBlock: bitcoin.script.witnessScriptHash.output.encode(p2tr.witness[1])
-		    }],
-		});
-
-		// Add the output
-		psbt.addOutput({
-		    address: destinationAddress,
-		    value: sendAmount,
-		});
-
-		// Sign the transaction using the private key
-		psbt.signInput(0, keyPair);
-
-		// Finalize the transaction
-		psbt.finalizeAllInputs();
-
-		// Extract the transaction and get the hex
-		const tx = psbt.extractTransaction();
-		console.log("Raw Transaction Hex:", tx.toHex());
+		const tx = new bitcoin.Transaction();
+		tx.addInput(Buffer.from(prevTransactionID, 'hex').reverse(), prevIndex);
+		tx.addOutput(p2tr.output, sendAmount);
+		const unsignedTxHex = tx.toHex();  
+		return unsignedTxHex;
         
     } catch (error) {
-        console.error('Error in sending funds from user wallet: ', error);
+        console.error('Error in set up taproot transaction: ', error);
     }
 }
 
+async function signTransactionToSend(client, txHex){
+	try{
+		result = await client.signTransaction(txHex);
+		if(result.complete)
+			return txID;
+		else
+			return 'error';
+	} catch (error) {
+        console.error('Error in signing transaction: ', error);
+    }
+}
 
-//createTransaction(user, issuer, 1).then((result)=>console.log(result))
-setUpIssuerTransaction('996ea13717bbdbea1363c76010ba86d395f41407b467456ba0519b47302bc267')
+async function broadcastTransaction(client, txHex){
+	try{
+		txID = await client.broadcastTransaction(txHex);
+		return txID
+	} catch (error) {
+        console.error('Error in broadcast transaction: ', error);
+    }
+}
+
+async function getRawTransaction(client, txID){
+	try{
+		info = await client.getRawTransaction(txID);
+		return info
+	} catch (error) {
+        console.error('Error in retrieving transaction details: ', error);
+    }
+} 
+
+async function redeemTransaction(client, transactionToRedeemID, scriptString, preimage){
+	try{
+
+		const txid = transactionToRedeemID;
+		let info = await getRawTransaction(client);
+		let vout, amount, scriptHex; 
+		for(let i=0; i<info.vout.length; i++){
+			if(info.vout[i].value==priceForMerchant){
+				vout=info.vout[i].n;
+				amount=info.vout[i].amount;
+				scriptHex=info.vout[i].scriptPubKey.hex;
+			}
+		} 
+
+		const utxo = {
+		    txid: txid,
+		    vout: vout,
+		    amount: amount,
+		    scriptPubKey: scriptHex
+		};
+		const leafScript = bitcoin.script.fromASM(leafScriptAsm);
+
+		const txb = new bitcoin.TransactionBuilder(bitcoin.networks.regtest);
+		txb.addInput(utxo.txid, utxo.vout, null, Buffer.from(utxo.scriptPubKey, 'hex'));
+
+		const newMerchantAddress = await client.getNewAddress();
+		const amountToSend = priceForMerchant * Math.pow(10, 8);
+		txb.addOutput(receiverAddress, amountToSend);
+
+		const witnessStack = [
+		    Buffer.from('empty_signature_placeholder', 'hex'),
+		    Buffer.from(preimage),   
+		    leafScript,
+		];
+
+
+		txb.addWitness(0, witnessStack);
+
+		const tx = txb.build();
+		const txHex = tx.toHex();
+		return unsignedTxHex;
+
+	}catch(error){
+		console.error('Error in redeeming transaction: ', error);
+	}
+}
+
+//createTransaction(user, issuer, 0.01).then((result)=>console.log(result))
+//setUpIssuerTransaction('cca93b0e90352e9c24eacb74013c022a1e53c888fa80260662104aad95bc4c53').then((result)=>console.log(result))
+//signTransactionToSend(issuer, '0100000001534cbc95ad4a1062062680fa88c8531e2a023c0174cbea249c2e35900e3ba9cc0000000000ffffffff0100350c0000000000225120cf62bf9801c09811952a3949948ac6de9bd00182d646f73dda4ef68c514b1e2d00000000')
+//	.then((result)=>console.log(result));
+//broadcastTransaction(issuer, '01000000000101534cbc95ad4a1062062680fa88c8531e2a023c0174cbea249c2e35900e3ba9cc0000000000ffffffff0100350c0000000000225120cf62bf9801c09811952a3949948ac6de9bd00182d646f73dda4ef68c514b1e2d02473044022020c67db171db56c53aca383e665be43477c89c34ec7b75c76dc3de63dea4d9af022058bf43bce54a4c507e9352b4e4fee3d99d9581963f0d265663a27cb4f959b3ed012103281ef9e6d19b69e901578a6c6044f180a552bdbc13d305d073a2496b5e01014d00000000')
+//	.then((result) => console.log(result)); --> a7e31e0a38e966672f072a5521f525c3baf66ec3f32c5705535a02537f58e084
