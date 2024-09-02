@@ -21,7 +21,6 @@ class BitcoinCoreClient{
 
     async mineblocks(nBlocks) {
         let toAddress=await this.client.getNewAddress()   
-        //console.log(toAddress);
         let transactionIDs=this.client.generateToAddress({
             nblocks:2,
             address: toAddress
@@ -35,10 +34,10 @@ class BitcoinCoreClient{
 
     async makeTransaction(receipitAddress, amount){
 
-        let transactionHEX=this.client.sendToAddress({
+        let transactionHEX=await this.client.sendToAddress({
             address:receipitAddress,
             amount: amount
-        }).then((result)=>console.log(result))
+        });
 
         return transactionHEX;
     }
@@ -73,6 +72,19 @@ class BitcoinCoreClient{
     async broadcastTransaction(transactionHEX){
         const txID = await this.client.command('sendrawtransaction', transactionHEX);
         return txID;
+    }
+
+    async processPSBT(psbt_hex){
+        const res= await this.client.walletProcessPsbt(psbt_hex);
+        return res;
+    }
+    async finalizePsbt(psbt_hex){
+        const res=await this.client.finalizePsbt(psbt_hex);
+        return res;
+    }
+    async decodePsbt(psbt_base64){
+        const res=await this.client.decodePsbt(psbt_base64);
+        return res;
     }
 }
 module.exports = BitcoinCoreClient 
