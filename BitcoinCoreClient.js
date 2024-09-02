@@ -74,8 +74,8 @@ class BitcoinCoreClient{
         return txID;
     }
 
-    async processPSBT(psbt_hex){
-        const res= await this.client.walletProcessPsbt(psbt_hex);
+    async processPSBT(psbt_base64){
+        const res= await this.client.walletProcessPsbt(psbt_base64);
         return res;
     }
     async finalizePsbt(psbt_hex){

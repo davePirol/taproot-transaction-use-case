@@ -314,13 +314,38 @@ async function redeemTransaction(client, transactionToRedeemID, internalPublicke
 
 		const txBase64=psbt.toBase64()
 
-		res = await merch1.decodePsbt(txBase64)
-		console.log(res);
+		//res = await merch1.decodePsbt(txBase64)
+		//console.log(res);
+
 		
+
 		return txBase64;
 
 	}catch(error){
 		console.error('Error in redeeming transaction: ', error);
+	}
+}
+
+function finalizePsbt(psbtBase64) {
+    const psbt = bitcoin.Psbt.fromBase64(psbtBase64);
+
+    // Finalize all inputs
+    psbt.finalizeAllInputs();
+
+    let res = psbt.extractTransaction()
+	console.log(res);	
+
+    // Extract and return the raw transaction
+    const rawTransaction = psbt.extractTransaction().toHex();
+    return rawTransaction;
+}
+
+async function processPSBT(client, psbtBase64){
+	try{
+	    let res = await client.processPSBT(psbtBase64);
+		return res;
+	}catch(error){
+		console.error('Error in processing partial transaction: ', error);
 	}
 }
 
@@ -356,7 +381,7 @@ async function main(user, issuer, merch1) {
         const taprootTX = await broadcastTransaction(issuer, temp2_tx);
         const proof = merkleTree.getProof(bitcoin.crypto.sha256(bitcoin.script.fromASM(temp.scripts[0])));
         //console.log(proof);
-        const result = await redeemTransaction(
+        const txBase64 = await redeemTransaction(
             merch1, 
             taprootTX, 
             temp.internalPublicKey,
@@ -365,7 +390,11 @@ async function main(user, issuer, merch1) {
             proof
         );
 
-        console.log(result);
+        let inter=await processPSBT(merch1, txBase64)
+
+        const rawTx = finalizePsbt(inter.psbt);
+
+        console.log(rawTx);
     } catch (error) {
         console.error('Error processing transaction:', error);
     }
@@ -377,3 +406,24 @@ async function main(user, issuer, merch1) {
 main(user, issuer, merch1);
 //test();
 //test2();
+
+/*
+
+Common Reasons a PSBT Is Not Finalized
+
+    Missing Signatures: One common reason for a PSBT to be marked as 
+    not finalized is that it is missing one or more required signatures.
+    Ensure that all necessary parties have signed the PSBT.
+
+    Incomplete Input Data: The input data might be incomplete or incorrect.
+    Verify that the input data, such as UTXOs and script information, is accurate and complete.
+
+    Unresolved Witness Data: For Taproot transactions, ensure that all witness data,
+    including the correct Taproot leaf scripts and any required preimages, 
+    are included and properly formatted.
+
+    Incorrect Finalization Procedure: Ensure that you are using the correct method to
+    finalize the PSBT. Depending on your implementation, you might need to use a 
+    specific library function or follow a particular sequence of steps.
+
+*/
