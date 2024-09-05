@@ -6,7 +6,7 @@ const { BIP32Factory } = require('bip32');
 const bip32 = BIP32Factory(tinysecp);
 const BitcoinCoreClient = require('./BitcoinCoreClient.js')
 const { MerkleTree } = require('merkletreejs');
-//const bip341 = require('bip341');
+const { witnessStackToScriptWitness } = require("./witness_stack_to_script_witness");
 
 bitcoin.initEccLib(tinysecp);
 const network = bitcoin.networks.regtest;
@@ -15,14 +15,10 @@ const hashes=[
 	'acb25d781d0fae9fe90e17c16348a87ca2dbd39f4fc988965a138468dab7b787',
 	'418de2ceac5129a866b6c3dd67ad1537102951e0bfe77398b37bfae092b84119'
 ];
-const pubKeyM=[
-	'17bb5938b3657fc6965bb0f66bcccb7e36f60a876a2aea21eb8845888c8d2730',
-	'd23dad7ea4b647cd9600c06f0570fb5a242dbe92d0097c311911d9d6ead97863',
-	'a8428c79c4b07661c953eb4c7902a41ce8544217f2e136bbe887456aef1f9a39'
-];
 
 const priceForUser=0.01
 const priceForMerchant=0.008
+const fee=1000
 
 const merchants=['merch1', 'merch2', 'merch3'];
 
@@ -30,10 +26,13 @@ let user=new BitcoinCoreClient('userWallet');
 let issuer=new BitcoinCoreClient('issuerWallet');
 let dummy=new BitcoinCoreClient('testwallet1');
 let merch1 = new BitcoinCoreClient('merchantWallet1');
-let merch2 = new BitcoinCoreClient('merchantWallet1');
-let merch3 = new BitcoinCoreClient('merchantWallet1');
+let merch2 = new BitcoinCoreClient('merchantWallet2');
+let merch3 = new BitcoinCoreClient('merchantWallet3');
 let merkleTree=[];
 let scriptTree;
+
+//TODO da sistemare nella funzione
+let privKey;
 
 async function getWalletUTXOs(client){
 	try {
@@ -128,8 +127,8 @@ async function setUpIssuerTransaction(prevTransactionID){
 		];
 
 		for (var i = 0; i < hashes.length; i++) {
-			let merchantPublicKey = await getNewPublicKey(eval(merchants[i]))
-	   		let leafScriptAsm = `OP_SHA256 ${hashes[i]} OP_EQUALVERIFY ${merchantPublicKey} OP_CHECKSIG`;
+			let pubKey = await getNewPublicKey(eval(merchants[i]))
+	   		let leafScriptAsm = `OP_SHA256 ${hashes[i]} OP_EQUALVERIFY ${pubKey} OP_CHECKSIG`;
 			let leafScript = bitcoin.script.fromASM(leafScriptAsm);
 			scripts.push(leafScript);
 			scriptsInClear.push(leafScriptAsm);
@@ -145,11 +144,6 @@ async function setUpIssuerTransaction(prevTransactionID){
 		scriptTree = createTaprootTree(scripts);
 		const root = merkleTree.getRoot().toString('hex');
 		
-		//const proof = merkleTree.getProof(bitcoin.script.fromASM(`OP_PUSHDATA1 90 OP_CHECKLOCKTIMEVERIFY OP_DROP ${pubKeyUser} OP_CHECKSIG`));
-		//console.log(proof)
-		//const isValid = merkleTree.verify(proof, bitcoin.script.fromASM(`OP_PUSHDATA1 90 OP_CHECKLOCKTIMEVERIFY OP_DROP ${pubKeyUser} OP_CHECKSIG`), root);
-		//console.log('Proof valid:', isValid);		
-
 		const p2tr = bitcoin.payments.p2tr({
 		    internalPubkey,
 		    scriptTree,
@@ -206,6 +200,7 @@ async function getNewPublicKey(client){
 	}
 }
 
+
 async function signTransactionToSend(client, txHex){
 	try{
 		result = await client.signTransaction(txHex);
@@ -256,6 +251,52 @@ async function redeemTransaction(client, transactionToRedeemID, internalPublicke
 		
 		//console.log(internalPubkey)
 
+
+		//TEST
+		const hash_lock_redeem = {
+		    output: bitcoin.script.fromASM(scriptString),
+		    redeemVersion: 192,
+		};
+		const hash_lock_p2tr = bitcoin.payments.p2tr({
+		    internalPubkey: internalPubkey,
+		    scriptTree,
+		    redeem: hash_lock_redeem,
+		    network
+		});
+		const tapLeafScript = {
+		    leafVersion: hash_lock_redeem.redeemVersion,
+		    script: hash_lock_redeem.output,
+		    controlBlock: hash_lock_p2tr.witness[hash_lock_p2tr.witness.length - 1]
+		};
+
+		const psbt = new bitcoin.Psbt({ network: bitcoin.networks.regtest });
+		psbt.addInput({
+			hash: transactionToRedeemID,
+			index: vout,
+			witnessUtxo: {
+				script: hash_lock_p2tr.output, 
+				value: amount * Math.pow(10, 8)
+			},
+		  	tapLeafScript: [
+		  		tapLeafScript
+	  		]
+		});
+		const newMerchantAddress = await client.getNewAddress();
+		const amountToSend = priceForMerchant * Math.pow(10, 8);
+	
+		psbt.addOutput({
+		  address: newMerchantAddress,
+		  value: amountToSend-fee, 
+		});
+
+		const txBase64=psbt.toBase64();
+		return txBase64;
+
+		//TEST FINE
+
+
+
+/*
 		const controlBlock1 = Buffer.concat([
 			Buffer.from([0xc0]), 
 			Buffer.from(internalPublickey, 'hex'), 
@@ -277,8 +318,7 @@ async function redeemTransaction(client, transactionToRedeemID, internalPublicke
 				    leafVersion: 0xc0,
             		script: leafScript,
 			  	}
-	  		],
-	  		witness: [Buffer.from(preimage, 'hex')]
+	  		]
 		});
 
 		const newMerchantAddress = await client.getNewAddress();
@@ -286,7 +326,7 @@ async function redeemTransaction(client, transactionToRedeemID, internalPublicke
 	
 		psbt.addOutput({
 		  address: newMerchantAddress,
-		  value: amountToSend, 
+		  value: amountToSend-fee, 
 		});
 
 		/*psbt.finalizeInput(0, (input, script) => {
@@ -301,18 +341,15 @@ async function redeemTransaction(client, transactionToRedeemID, internalPublicke
 		});*/
 
 
-		//psbt.finalizeTaprootInput(0);
-
 		/*psbt.updateInput(0, {
 		    finalScriptWitness: bitcoin.script.compile([
-		        preimage,  // Preimage satisfying OP_SHA256
-		        Buffer.alloc(64, 0),  // Schnorr signature placeholder (to be replaced with actual signature)
-		        leafScript,  // Redeem script
-		        controlBlock  // Control block
+		        preimage,
+//		        Buffer.alloc(64, 0),  // Schnorr signature placeholder
 		    ])
 		});*/
 
-		const txBase64=psbt.toBase64()
+
+/*		const txBase64=psbt.toBase64()
 
 		//res = await merch1.decodePsbt(txBase64)
 		//console.log(res);
@@ -320,22 +357,34 @@ async function redeemTransaction(client, transactionToRedeemID, internalPublicke
 		
 
 		return txBase64;
+*/
 
 	}catch(error){
 		console.error('Error in redeeming transaction: ', error);
 	}
 }
 
-function finalizePsbt(psbtBase64) {
+function finalizePsbt(psbtBase64, preimage, tapLeafScript) {
     const psbt = bitcoin.Psbt.fromBase64(psbtBase64);
 
-    // Finalize all inputs
-    psbt.finalizeAllInputs();
 
-    let res = psbt.extractTransaction()
-	console.log(res);	
+    const customFinalizer = (_inputIndex, input) => {
+    	//console.log(input.tapScriptSig)
+	    const scriptSolution = [
+	        input.tapScriptSig[0].signature,
+	        preimage
+	    ];
+	    const witness = scriptSolution
+	        .concat(tapLeafScript.script)
+	        .concat(tapLeafScript.controlBlock);
 
-    // Extract and return the raw transaction
+	    return {
+	        finalScriptWitness: witnessStackToScriptWitness(witness)
+	    }
+	}
+
+	psbt.finalizeInput(0, customFinalizer);
+
     const rawTransaction = psbt.extractTransaction().toHex();
     return rawTransaction;
 }
@@ -380,7 +429,6 @@ async function main(user, issuer, merch1) {
         const temp2_tx = await signTransactionToSend(issuer, temp.txID);
         const taprootTX = await broadcastTransaction(issuer, temp2_tx);
         const proof = merkleTree.getProof(bitcoin.crypto.sha256(bitcoin.script.fromASM(temp.scripts[0])));
-        //console.log(proof);
         const txBase64 = await redeemTransaction(
             merch1, 
             taprootTX, 
@@ -390,9 +438,12 @@ async function main(user, issuer, merch1) {
             proof
         );
 
-        let inter=await processPSBT(merch1, txBase64)
+        let inter=await processPSBT(merch1, txBase64);
 
-        const rawTx = finalizePsbt(inter.psbt);
+        res = await merch1.decodePsbt(inter.psbt);
+        console.log(res);
+
+        const rawTx = finalizePsbt(inter.psbt, temp.preimages[0]);
 
         console.log(rawTx);
     } catch (error) {
@@ -406,24 +457,3 @@ async function main(user, issuer, merch1) {
 main(user, issuer, merch1);
 //test();
 //test2();
-
-/*
-
-Common Reasons a PSBT Is Not Finalized
-
-    Missing Signatures: One common reason for a PSBT to be marked as 
-    not finalized is that it is missing one or more required signatures.
-    Ensure that all necessary parties have signed the PSBT.
-
-    Incomplete Input Data: The input data might be incomplete or incorrect.
-    Verify that the input data, such as UTXOs and script information, is accurate and complete.
-
-    Unresolved Witness Data: For Taproot transactions, ensure that all witness data,
-    including the correct Taproot leaf scripts and any required preimages, 
-    are included and properly formatted.
-
-    Incorrect Finalization Procedure: Ensure that you are using the correct method to
-    finalize the PSBT. Depending on your implementation, you might need to use a 
-    specific library function or follow a particular sequence of steps.
-
-*/

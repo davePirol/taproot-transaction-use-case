@@ -22,7 +22,7 @@ class BitcoinCoreClient{
     async mineblocks(nBlocks) {
         let toAddress=await this.client.getNewAddress()   
         let transactionIDs=this.client.generateToAddress({
-            nblocks:2,
+            nblocks:nBlocks,
             address: toAddress
         }).then(()=>console.log('mined into '+toAddress+' '+nBlocks+' blocks'));
         return transactionIDs;
@@ -54,6 +54,11 @@ class BitcoinCoreClient{
         return info.pubkey
     }
 
+    async getPrivKeyFromAddress(address){
+        const privkey = await this.client.dumpPrivKey(address);
+        return privkey
+    }
+
     async getRawTransaction(transactionID){
         const info = await this.client.getRawTransaction({
             txid: transactionID,
@@ -75,15 +80,15 @@ class BitcoinCoreClient{
     }
 
     async processPSBT(psbt_base64){
-        const res= await this.client.walletProcessPsbt(psbt_base64);
+        const res = await this.client.walletProcessPsbt(psbt_base64);
         return res;
     }
     async finalizePsbt(psbt_hex){
-        const res=await this.client.finalizePsbt(psbt_hex);
+        const res = await this.client.finalizePsbt(psbt_hex);
         return res;
     }
     async decodePsbt(psbt_base64){
-        const res=await this.client.decodePsbt(psbt_base64);
+        const res = await this.client.decodePsbt(psbt_base64);
         return res;
     }
 }
