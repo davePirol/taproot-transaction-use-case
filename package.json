@@ -10,6 +10,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "csv": "^6.3.10",
+    "jquery-csv": "^1.0.40",
     "merkletreejs": "^0.4.0",
     "tiny-secp256k1": "^2.2.3"
   }

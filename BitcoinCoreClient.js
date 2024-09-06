@@ -16,7 +16,16 @@ class BitcoinCoreClient{
             wallet: walletName
         });
 
+    }
 
+    async loadWallet(name){
+        const loadedWallets = await this.client.command('listwallets');
+        if (loadedWallets.includes(name)) {
+          return true;
+        }
+        let res=await this.client.loadWallet(name);
+        console.log(res);
+        return true;
     }
 
     async mineblocks(nBlocks) {
@@ -24,7 +33,7 @@ class BitcoinCoreClient{
         let transactionIDs=this.client.generateToAddress({
             nblocks:nBlocks,
             address: toAddress
-        }).then(()=>console.log('mined into '+toAddress+' '+nBlocks+' blocks'));
+        })//.then(()=>console.log('mined into '+toAddress+' '+nBlocks+' blocks'));
         return transactionIDs;
     }
 
