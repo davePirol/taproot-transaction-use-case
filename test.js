@@ -31,7 +31,7 @@ async function printInfoComparison(txID1, txID2, controller, nScripts){
     const bl2 = tx2.size;
     const wu2 = tx2.weight;
     const vs2 = tx2.vsize;
-    const witnessSize2 = bl1 - vs2;
+    const witnessSize2 = bl2 - vs2;
     const vb2 = bl2 + Math.ceil(witnessSize2 / 4);
     console.log(`-----------------transaction info [taproot/segwit](number of scripts: ${nScripts})-----------------`);
     console.log('base size (wo witness): '+ bl1+" / "+bl2);
@@ -82,7 +82,7 @@ async function transactionDimension(){
 }
 
 async function comparisonDimension(){
-	for (let numScripts=1; numScripts<=1000; numScripts*=10){
+	for (let numScripts=1; numScripts<=100; numScripts++){
 		const controller = new Controller();
 		const controller2 = new Controller();
 		await controller.loadWallet();
@@ -109,7 +109,7 @@ async function comparisonDimension(){
 	    const segwitInfo = await controller2.setUpIssuerTransactionSegwit(toIssuerTx2, controller2.issuerKeyPair, numScripts);
 		await controller.mineBlock();
 
-		await printInfoComparison(taprootInfo.txID, segwitInfo.txID, controller, numScripts);
+		//await printInfoComparison(taprootInfo.txID, segwitInfo.txID, controller, numScripts);
 
 		const resTX=await controller.redeemTransaction(
 			taprootInfo.txID, 
@@ -121,7 +121,7 @@ async function comparisonDimension(){
 		);
 		const resTX2=await controller.redeemTransactionSegwit(
 			segwitInfo.txID, 
-			controlle2.merchantKeyPair, 
+			controller2.merchantKeyPair, 
 			segwitInfo.script, 
 			segwitInfo.preimages[0], 
 			null
@@ -156,6 +156,7 @@ async function main(){
 }
 
 main();
+
 
 /*let myuuid = uuidv7();
 console.log('pre: ', myuuid);

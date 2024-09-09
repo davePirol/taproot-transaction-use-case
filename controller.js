@@ -405,23 +405,23 @@ class Controller{
           this.merchantKeyPair = set;
         }
         let hash=bitcoin.crypto.sha256(Buffer.from(preimages[i]));
-        scriptAsm += `OP_DUP OP_SHA256 ${hash.toString('hex')} OF_IF OP_SHA256 ${hash.toString('hex')} OP_EQUALVERIFY ${this.toXOnly(set.publicKey).toString('hex')} OP_CHECKSIG OP_ELSE`;
+        scriptAsm += `OP_SHA256 ${hash.toString('hex')} OP_EQUAL OP_IF ${set.publicKey.toString('hex')} OP_CHECKSIG OP_ELSE `;
         
       }
       
       const setUser = ECPair.makeRandom({network: this.network});
-      scriptAsm += `OP_PUSHDATA1 90 OP_CHECKLOCKTIMEVERIFY OP_DROP ${this.toXOnly(setUser.publicKey).toString('hex')} OP_CHECKSIG`;
+      scriptAsm += `OP_PUSHDATA1 90 OP_CHECKLOCKTIMEVERIFY OP_DROP ${setUser.publicKey.toString('hex')} OP_CHECKSIG `;
 
       for(var i = 0; i < nScripts; i++){
-        scriptAsm+='OP_ENDIF'
+        scriptAsm+='OP_ENDIF'+(i<nScripts-1 ? ' ' : '');
       }
 
-      let scriptInClear = scriptAsm.slice();
+      let lockingScript = scriptAsm.slice();
       let script = bitcoin.script.fromASM(scriptAsm);
       
       const p2wsh = bitcoin.payments.p2wsh({ 
         redeem: { 
-          output: locking_script, 
+          output: script, 
           network: this.network 
         }, 
         network: this.network 
@@ -466,7 +466,7 @@ class Controller{
 
       return {
         'txID':txID,
-        'script': scriptInClear,
+        'script': lockingScript,
         'preimages': preimages
       };
           
@@ -490,7 +490,7 @@ class Controller{
           
       const p2wsh = bitcoin.payments.p2wsh({ 
         redeem: { 
-          output: locking_script, 
+          output: bitcoin.script.fromASM(scriptString), 
           network: this.network 
         }, 
         network: this.network 
@@ -501,10 +501,10 @@ class Controller{
         hash: transactionToRedeemID,
         index: vout,
         witnessUtxo: {
-            script: p2wsh.output,
-            value: Math.round(amount *  Math.pow(10, 8))
+          script: p2wsh.output,
+          value: Math.round(amount *  Math.pow(10, 8))
         },
-        witnessScript: scriptString
+        witnessScript: bitcoin.script.fromASM(scriptString)
       });
       
       let keyPair = ECPair.makeRandom({network: this.network});
@@ -522,11 +522,11 @@ class Controller{
       psbt.signInput(0, senderKeyPair);
 
       const finalizeInput = (_inputIndex, input) => {
-        const redeemPayment = payments.p2wsh({
+        const redeemPayment = bitcoin.payments.p2wsh({
           redeem: {
-            input: script.compile([
+            input: bitcoin.script.compile([
               input.partialSig[0].signature,
-              preimage
+              Buffer.from(preimage)
             ]),
             output: input.witnessScript
           }
