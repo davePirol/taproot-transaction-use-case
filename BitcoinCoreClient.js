@@ -33,7 +33,7 @@ class BitcoinCoreClient{
         let transactionIDs=this.client.generateToAddress({
             nblocks:nBlocks,
             address: toAddress
-        })//.then(()=>console.log('mined into '+toAddress+' '+nBlocks+' blocks'));
+        });
         return transactionIDs;
     }
 
