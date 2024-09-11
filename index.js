@@ -14,6 +14,32 @@ let selectedPacket;
 let scripts;
 let secrets;
 
+async function createPacketsTree(){
+	let toWrite={
+		'merkleRoot': '1234567890123456789012345678901234567890123456789012345678901234',
+		'packets': [
+			{
+				'txID': '1234567890123456789012345678901234567890123456789012345678901234',
+				'internalPublicKey': '1234567890123456789012345678901234567890123456789012345678901234',
+				'rootTree': '1234567890123456789012345678901234567890123456789012345678901234',
+				'secret' : [
+					'',
+					'',
+					'',
+				],
+				'scripts' : [
+					'',
+					'',
+					'',
+					''
+				]
+			}
+		]
+		
+	}
+	fs.writeFileSync('./packet_tree.json', toWrite);
+}
+
 async function parseCSV(content) {
     return new Promise((resolve, reject) => {
         parse(content, { delimiter: ';', from_line: 2 }, (err, rows) => {
@@ -77,7 +103,7 @@ async function seeCatalog(controller){
 }
 
 async function prepareTaprootTransaction(controller, userTX){
-	controller.setUpIssuerTransaction(userTX, controller.issuerKeyPair).then((issuerInfo)=>{
+	controller.setUpIssuerTransaction(userTX, controller.issuerKeyPair, 3).then((issuerInfo)=>{
 		console.log('You has just recived the information about your purchased packet. Keep them secret!!');
 		//TODO memorizzare in un file le info dell'acquisto in un albero
 		console.log('#################################################')

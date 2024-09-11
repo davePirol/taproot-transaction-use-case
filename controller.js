@@ -91,27 +91,6 @@ class Controller{
     return { address, keyPair };
   }
 
-  createTaprootTreeOLD(scripts){
-    if(scripts.length==0){
-      return;
-    }
-    if(scripts.length==1){
-      return {output: scripts[0], redeemVersion: 192};
-    }else if(scripts.length==2){
-      return [{output: scripts[0], redeemVersion: 192}, {output: scripts[1], redeemVersion: 192}]
-    }else{
-
-      let left=scripts.splice(0, scripts.length/2)
-      let toInsertLeft=left[0];
-      let toInsertRight=scripts[0];
-      left.shift();
-      scripts.shift();
-      let newTreeLeft=[this.createTaprootTree(left), {output: toInsertLeft, redeemVersion: 192}];
-      let newTreeRight=[this.createTaprootTree(scripts), {output: toInsertRight, redeemVersion: 192}];
-      return [newTreeLeft, newTreeRight];
-    }
-  }
-
   createTaprootTree(scripts) {
     
     if (scripts.length === 0) {
@@ -347,9 +326,30 @@ class Controller{
           value: amount * Math.pow(10, 8)
         },
         tapLeafScript: [
-          tapLeafScript
+          {
+            controlBlock: Buffer.from(controlBlock),
+            leafVersion: 0xc0,
+            script: leafScript
+          }
         ]
       });
+      let keyPair = ECPair.makeRandom({network: this.network});
+      const newMerchantAddress = bitcoin.payments.p2pkh({ 
+        pubkey: keyPair.publicKey,
+        network: this.network 
+      }).address;
+    
+      psbt.addOutput({
+        address: newMerchantAddress,
+        value: Math.round((this.priceForMerchant - this.fee) * Math.pow(10, 8)), 
+      });
+      
+      psbt.signTaprootInput();
+
+      psbt.finalizeTaprootInput(0, senderKeyPair);
+      const rawTx = psbt.extractTransaction().toHex();
+      const txID = await this.core.broadcastTransaction(rawTx);
+      return txID;
       */
       //TEST
 
@@ -358,7 +358,6 @@ class Controller{
         pubkey: keyPair.publicKey,
         network: this.network 
       }).address;
-
     
       psbt.addOutput({
         address: newMerchantAddress,

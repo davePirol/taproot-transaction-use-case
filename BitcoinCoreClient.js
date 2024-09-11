@@ -24,7 +24,6 @@ class BitcoinCoreClient{
           return true;
         }
         let res=await this.client.loadWallet(name);
-        console.log(res);
         return true;
     }
 
