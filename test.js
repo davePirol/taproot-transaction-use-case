@@ -182,7 +182,7 @@ async function main(){
 	/*
 	### TEST ONE: show the increment of transaction space occupancy as increasing the taproot tree
 	*/
-	//await transactionDimension();
+	await transactionDimension();
 
 	/*
 	### TEST TWO: show the comparison of the space occupancy between a taproot transaction and an equivalent segwit

@@ -3,6 +3,8 @@ const fs = require('fs').promises;
 const readline = require('node:readline');
 const Controller = require('./controller.js');
 const util = require('util');
+const { MerkleTree } = require('merkletreejs');
+const { crypto } = require('bitcoinjs-lib');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -23,21 +25,46 @@ async function createPacketsTree(){
 				'internalPublicKey': '1234567890123456789012345678901234567890123456789012345678901234',
 				'rootTree': '1234567890123456789012345678901234567890123456789012345678901234',
 				'secret' : [
-					'',
-					'',
-					'',
+					'0191e522-0bb3-7ded-9858-aa4b426d7f7d',
+					'0191e522-3a60-7943-be27-a613bd7f1485',
+					'0191e522-6387-7c92-ba5a-c0a710ef050a',
 				],
 				'scripts' : [
-					'',
-					'',
-					'',
-					''
+					'OP_SHA256 7bfa4fbc5026d63ee332d09b22f3ece99d4a9d60ebdb47ca80309315d6901509 OP_EQUALVERIFY 60259347468865510975294375267462413016817361371017614189499870424480310654587 OP_CHECKSIG',
+					'OP_SHA256 3b09e6e7708bafe2190be6faa3ae0a4cb8ba1857172745ac881ccaba0ea9af6c OP_EQUALVERIFY 15964601596200485116341925535263232323712292924103453749276824333082389844614 OP_CHECKSIG',
+					'OP_SHA256 a82aa77f8a2a1779969eb2ee9f794247eeb46076bef33683a43199d504a0d501 OP_EQUALVERIFY 2476095350341551703460861700631018704579736357695840050028248065537942328973 OP_CHECKSIG',
+					'OP_PUSHDATA1 90 OP_CHECKLOCKTIMEVERIFY OP_DROP 84056946504862429608928332209448060233355285095154235110125549251675805159025 OP_CHECKSIG'
 				]
 			}
 		]
 		
 	}
-	fs.writeFileSync('./packet_tree.json', toWrite);
+	fs.writeFile('./packet_tree.json', JSON.stringify(toWrite), err => {
+  		if (err)
+    		console.error(err);
+	});
+}
+
+async function addToPacketsTree(info){
+	
+	let data = await fs.readFile('./packet_tree.json', {encoding:'utf8'});
+	let file = JSON.parse(data);
+	file.packets.push(
+		{
+			'txID': info.txID,
+			'internalPublicKey': info.internalPublicKey,
+			'rootTree': info.rootTree,
+			'secret' : info.preimages,
+			'scripts' : info.scripts,
+		}
+	);	
+	const leaves = file.packets.slice().map(x => crypto.sha256(x))
+	let mt=new MerkleTree(leaves, crypto.sha256);
+	file.merkleRoot=mt.getRoot().toString('hex');
+	fs.writeFile('./packet_tree.json', JSON.stringify(file), err => {
+		if (err)
+			console.error(err);
+	});
 }
 
 async function parseCSV(content) {
@@ -105,7 +132,7 @@ async function seeCatalog(controller){
 async function prepareTaprootTransaction(controller, userTX){
 	controller.setUpIssuerTransaction(userTX, controller.issuerKeyPair, 3).then((issuerInfo)=>{
 		console.log('You has just recived the information about your purchased packet. Keep them secret!!');
-		//TODO memorizzare in un file le info dell'acquisto in un albero
+		addToPacketsTree(issuerInfo);
 		console.log('#################################################')
 		console.log('transaction ID: ', issuerInfo.txID);
 		console.log('internal public key: ', issuerInfo.internalPublicKey);
@@ -141,6 +168,7 @@ async function selectMerchant(controller){
 async function main(){
 	const c = new Controller();
 	await c.loadWallet();
+	createPacketsTree();
 	console.log('As first thing we provide you a transaction ID ready to be spent:');
 	const toUserTx = await c.rechargeUserAddress();
 

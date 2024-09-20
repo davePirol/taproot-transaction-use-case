@@ -32,11 +32,6 @@ class Controller{
   constructor(){
     this.core=new BitcoinCoreClient();
     this.merkleTree=[];
-    /*this.hashes=[
-      '5ac1e98bd96888758a72135240684568b0d1d4350a5d3d87736b807a838dd193',
-      'acb25d781d0fae9fe90e17c16348a87ca2dbd39f4fc988965a138468dab7b787',
-      '418de2ceac5129a866b6c3dd67ad1537102951e0bfe77398b37bfae092b84119'
-    ];*/
     this.priceForUser=0.01
     this.priceForMerchant=0.008
     this.fee=0.0001
@@ -417,7 +412,6 @@ class Controller{
 
       let lockingScript = scriptAsm.slice();
       let script = bitcoin.script.fromASM(scriptAsm);
-      
       const p2wsh = bitcoin.payments.p2wsh({ 
         redeem: { 
           output: script, 
@@ -553,7 +547,7 @@ class Controller{
   }
 
 
-  async main() {
+  /*async main() {
       try {
           const startTX = await this.rechargeUserAddress();
           await core.mineblocks(1);
@@ -577,6 +571,6 @@ class Controller{
       } catch (error) {
           console.error('Error processing transaction:', error);
       }
-  }
+  }*/
 }
 module.exports = Controller
